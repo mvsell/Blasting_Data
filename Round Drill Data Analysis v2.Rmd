@@ -1,0 +1,222 @@
+---
+title: "Round Drill Analysis"
+author: "Bauyrjan Jyenis"
+date: "January 31, 2017"
+output:
+  html_document: default
+  word_document: default
+---
+
+## Load necessary packages
+
+```{r}
+suppressMessages(library(lattice))
+suppressMessages(library(ggplot2))
+suppressMessages(library(stats))
+suppressMessages(library(dplyr))
+```
+
+## Load and clean data
+
+```{r}
+# Ensure to set the working directory to the directory where your data reside
+# Let's first read data into R, split data into training and test sets
+# ********************************************************************
+# Training set
+train<-read.csv("test-dec.csv", header = TRUE)
+train<-train[,-c(5:10)]
+colnames(train)<-c("Cut.Length", "Rioprime.25", "UG.Matrix", "Blasted.Volume")
+# First test set
+test1<-read.csv("test.csv", header = TRUE)
+test1<-na.omit(test1)
+colnames(test1)<-c("Cut.Length", "Rioprime.25", "UG.Matrix", "Blasted.Volume")
+# Second test set
+test2<-read.csv("rdarfile2.csv", header = TRUE) 
+test2<-test2[,c(-1,-2,-11,-12,-16)]
+test2<-na.omit(test2)
+colnames(test2)<-c("Log.File", "Chainage", "Num.Holes", "Drill.Time", "Meter.Adv", "Cut.Length", "Plan.Length", "Overbreak", "Rioprime.25", "UG.Matrix", "Blasted.Volume")
+```
+
+## Let's try and understand the data
+
+drill data - variable units:
+
+A data frame with 25 observations on 11 variables
+
+[,1] Log.File (text)
+
+[,2] Chainage (meters)
+
+[,3] Num.Holes (count)
+
+[,4] Drill.Time (HH:MM)
+
+[,5] Meter.Adv (meters)
+
+[,6] Cut.Length (meters)
+
+[,7] Plan.Length (meters)
+
+[,8] Overbreak (%)
+
+[,9] Rioprime.25 (count)
+
+[,10] UG.Matrix (kg)
+
+[,11] Blasted.Volume (m3)
+
+
+```{r}
+# We will build our predictive model using the training set, then will test our model using the test set
+head(train)
+# Now, let's plot and see Blasted Volume against Cut.Length
+y<-as.numeric(train$Blasted.Volume)
+x<-as.numeric(train$Cut.Length)
+g=ggplot(data.frame(x=x,y=y),aes(x=x,y=y))
+g=g+geom_point(size=7,colour="black",alpha=0.4)
+g=g+geom_point(size=5,colour="red",alpha=0.4)
+g=g+ggtitle("Round Drill Data")+xlab("Cut Length")+ylab("Blasted Volume")
+g
+# Now, let's plot and see Blasted Volume against UG.Matrix
+y<-as.numeric(train$Blasted.Volume)
+x<-as.numeric(train$UG.Matrix)
+g=ggplot(data.frame(x=x,y=y),aes(x=x,y=y))
+g=g+geom_point(size=7,colour="black",alpha=0.4)
+g=g+geom_point(size=5,colour="red",alpha=0.4)
+g=g+ggtitle("Round Drill Data")+xlab("UG.Matrix")+ylab("Blasted Volume")
+g
+# Now, let's plot and see Blasted Volume against Rioprime.25
+y<-as.numeric(train$Blasted.Volume)
+x<-as.numeric(train$Rioprime.25)
+g=ggplot(data.frame(x=x,y=y),aes(x=x,y=y))
+g=g+geom_point(size=7,colour="black",alpha=0.4)
+g=g+geom_point(size=5,colour="red",alpha=0.4)
+g=g+ggtitle("Round Drill Data")+xlab("Rioprime.25")+ylab("Blasted Volume")
+g
+# Blasted Volume
+hist(train$Blasted.Volume)
+# Cut Length
+hist(train$Cut.Length)
+# UG Matrix
+hist(train$UG.Matrix)
+# Rioprime 25
+hist(train$Rioprime.25)
+# Now, let's see correlation between features of this data set
+cor(train, use = "complete.obs", method = "kendall")
+pairs(Blasted.Volume~Cut.Length+Rioprime.25+UG.Matrix, data = train)
+```
+
+## Build model and compare models
+
+```{r}
+# Let's fit some models with different variables with Blasted Volume as predicted outcome
+fit1<-lm(Blasted.Volume~Cut.Length, data = train)
+fit2<-lm(Blasted.Volume~Cut.Length+UG.Matrix, data = train)
+fit3<-lm(Blasted.Volume~Cut.Length+UG.Matrix+Rioprime.25, data = train)
+fit4<-lm(Blasted.Volume~I(Cut.Length-mean(Cut.Length))+UG.Matrix, data = train)
+fit5<-lm(Blasted.Volume~I(Cut.Length-mean(Cut.Length))+Rioprime.25+Rioprime.25*UG.Matrix, data = train)
+# Let's see the summary of each model we fitted above
+summary(fit1)
+summary(fit2)
+summary(fit3)
+summary(fit4)
+summary(fit5)
+# Let's compare models and do normality test on residuals
+anova(fit1, fit2, fit3, fit4, fit5)
+# First model
+shapiro.test(fit1$residuals)
+hist(fit1$residuals)
+par(mfrow=c(2,2))
+plot(fit1)
+# Second model
+shapiro.test(fit2$residuals)
+hist(fit2$residuals)
+par(mfrow=c(2,2))
+plot(fit2)
+# Third model
+shapiro.test(fit3$residuals)
+hist(fit3$residuals)
+par(mfrow=c(2,2))
+plot(fit3)
+# Fourth model
+shapiro.test(fit4$residuals)
+hist(fit4$residuals)
+par(mfrow=c(2,2))
+plot(fit4)
+# Fifth model
+shapiro.test(fit5$residuals)
+hist(fit5$residuals)
+par(mfrow=c(2,2))
+plot(fit5)
+```
+
+It looks like the fit5 is the best model as per ANOVA test and supporting normality test with shapiro test. Also, Q-Q plot shows that residuals are normal.
+
+## Analyze the model
+```{r}
+x<-train$Cut.Length
+y<-resid(fit5)
+g=ggplot(data.frame(x=x,y=y),aes(x=x,y=y))
+g=g+geom_hline(yintercept = 0,size=2)
+g=g+geom_point(size=7,colour="black",alpha=0.4)
+g=g+geom_point(size=5,colour="red",alpha=0.4)
+g=g+xlab("Cut Length")+ylab("Residuals")
+g
+```
+
+
+## Predict and test our selected model
+
+```{r}
+# Test the model with test2 data
+p<-predict(fit5, newdata=test2, interval="prediction")
+p<-data.frame(p)
+pavg1<-mean(p$fit)
+avg1<-mean(test2$Blasted.Volume)
+prc1<-pavg1/avg1*100
+# Test the model with test1 data
+p1<-predict(fit5, newdata=test1, interval="prediction")
+p1<-data.frame(p1)
+pavg2<-mean(p1$fit)
+avg2<-mean(test1$Blasted.Volume)
+prc2<-pavg2/avg2*100
+```
+
+
+## Analyze the prediction outcomes
+
+```{r}
+# Let's plot the Prediction Variation against Cut Length - using test2 data
+pfit<-p$fit
+act<-test2$Blasted.Volume
+y<-abs(pfit-act)
+x<-test2$Cut.Length
+g=ggplot(data.frame(x=x,y=y),aes(x=x,y=y))
+g=g+geom_hline(yintercept = mean(test2$Cut.Length),size=2)
+g=g+geom_point(size=7,colour="black",alpha=0.4)
+g=g+geom_point(size=5,colour="red",alpha=0.4)
+g=g+xlab("Cut Length")+ylab("Prediction Variation")
+g
+pvar_mean<-mean(y)
+pvar_max<-max(y)
+pvar_min<-min(y)
+```
+
+## CONCLUSION
+
+
+The predicted average value of Blasted Volume came out to be `r round(pavg1, digits=2)` m3.
+
+The actual average value of Blasted Volume is `r round(avg1, digits=2)` m3.
+
+According to our analysis, our model predicts average Blasted Volume with approx. `r round(prc1)`% precision.
+
+Average unit difference between actual Blasted Volume and predicted Blasted Volume: `r round(pvar_mean, digits=2)` m3.
+
+Maximum difference between actual Blasted Volume and predicted Blasted Volume: `r round(pvar_max, digits=2)` m3.
+
+Minimum difference between actual Blasted Volume and predicted Blasted Volume: `r round(pvar_min, digits=2)` m3.
+
+
+
+
